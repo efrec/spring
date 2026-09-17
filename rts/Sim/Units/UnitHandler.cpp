@@ -449,9 +449,27 @@ void CUnitHandler::Update()
 	UpdateUnitLosStates();
 	SlowUpdateUnits();
 	UpdateUnits();
+	FlushQueueEvents();
 	UpdateUnitWeapons();
 
 	inUpdateCall = false;
+}
+
+void CUnitHandler::FlushQueueEvents()
+{
+	if (!eventHandler.HasQueueEventClients() && !eventHandler.HasCommandActivatedClients())
+		return;
+
+	// defer GarbageCollectUnit so a callin cannot free the unit being flushed
+	const bool wasInUpdateCall = inUpdateCall;
+	inUpdateCall = true;
+
+	// by index: a callin may create units and grow the vector
+	for (size_t i = 0; i < activeUnits.size(); i++) {
+		activeUnits[i]->commandAI->FlushQueueEvents();
+	}
+
+	inUpdateCall = wasInUpdateCall;
 }
 
 void CUnitHandler::UpdatePostAnimation()

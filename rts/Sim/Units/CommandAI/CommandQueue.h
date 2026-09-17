@@ -1,10 +1,12 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
-#ifndef _COMMAND_QUEUE_H
-#define _COMMAND_QUEUE_H
+#pragma once
 
 #include <deque>
+#include <vector>
 #include "Command.h"
+
+class CUnit;
 
 /// A wrapper class for std::deque<Command> to keep track of commands
 class CCommandQueue {
@@ -17,12 +19,20 @@ class CCommandQueue {
 
 	public:
 		enum QueueType {
-			CommandQueueType,
-			NewUnitQueueType,
+			OrderQueueType,
+			RallyQueueType,
 			BuildQueueType
 		};
 
 		inline QueueType GetType() const { return queueType; }
+
+		/// one recorded mutation, raised to Lua by FlushEvents
+		struct Event {
+			int index;
+			int tag;
+			int cmdID;
+			bool added;
+		};
 
 	public:
 		/// limit to a float's integer range
@@ -40,41 +50,29 @@ class CCommandQueue {
 
 		inline size_type size() const { return queue.size(); }
 
-		inline void push_back(const Command& cmd);
-		inline void push_front(const Command& cmd);
+		// Mutators only record. Nothing runs Lua until CUnitHandler::FlushQueueEvents calls FlushEvents.
+		void push_back(const Command& cmd);
+		void push_front(const Command& cmd);
 
-		void emplace_back(Command&& cmd) {
-			queue.emplace_back(cmd);
-			queue.back().SetTag(GetNextTag());
-		}
-		void emplace_front(Command&& cmd) {
-			queue.emplace_front(cmd);
-			queue.front().SetTag(GetNextTag());
-		}
+		void emplace_back(Command&& cmd);
+		void emplace_front(Command&& cmd);
 
-		inline iterator insert(iterator pos, const Command& cmd);
+		iterator insert(iterator pos, const Command& cmd);
 
-		inline void pop_back()
-		{
-			queue.pop_back();
-		}
-		inline void pop_front()
-		{
-			queue.pop_front();
-		}
+		void pop_back();
+		void pop_front();
 
-		inline iterator erase(iterator pos)
-		{
-			return queue.erase(pos);
-		}
-		inline iterator erase(iterator first, iterator last)
-		{
-			return queue.erase(first, last);
-		}
-		inline void clear()
-		{
-			queue.clear();
-		}
+		iterator erase(iterator pos);
+		iterator erase(iterator first, iterator last);
+
+		void clear();
+
+		/// overwrite a queued command in place and keep the cmd's tag
+		void Replace(size_type idx, const Command& cmd);
+
+		/// raise any recorded queue events, then UnitQueueChanged, then UnitCommandActivated
+		// if the front command updated; events recorded during these raise on the next flush
+		void FlushEvents();
 
 		inline iterator       end()         { return queue.end(); }
 		inline const_iterator end()   const { return queue.end(); }
@@ -98,18 +96,27 @@ class CCommandQueue {
 		inline const Command& operator[](size_type i) const { return queue[i]; }
 
 	private:
-		CCommandQueue() : queueType(CommandQueueType), tagCounter(0) {};
+		CCommandQueue() : queueType(OrderQueueType), tagCounter(0), owner(nullptr), flushedFrontTag(-1), flushing(false) {};
 		CCommandQueue(const CCommandQueue&);
 		CCommandQueue& operator=(const CCommandQueue&);
 
 	private:
 		inline int GetNextTag();
 		inline void SetQueueType(QueueType type) { queueType = type; }
+		inline void SetOwner(CUnit* unit) { owner = unit; }
+
+		bool WantsEvents() const;
+		void Record(bool added, size_type idx, const Command& cmd);
 
 	private:
 		std::deque<Command> queue;
 		QueueType queueType;
 		int tagCounter;
+		CUnit* owner;
+
+		std::vector<Event> pending;
+		int flushedFrontTag;
+		bool flushing;
 };
 
 
@@ -121,28 +128,3 @@ inline int CCommandQueue::GetNextTag()
 
 	return tagCounter;
 }
-
-
-inline void CCommandQueue::push_back(const Command& cmd)
-{
-	queue.push_back(cmd);
-	queue.back().SetTag(GetNextTag());
-}
-
-
-inline void CCommandQueue::push_front(const Command& cmd)
-{
-	queue.push_front(cmd);
-	queue.front().SetTag(GetNextTag());
-}
-
-
-inline CCommandQueue::iterator CCommandQueue::insert(iterator pos, const Command& cmd)
-{
-	Command tmpCmd = cmd;
-	tmpCmd.SetTag(GetNextTag());
-	return queue.insert(pos, tmpCmd);
-}
-
-
-#endif // _COMMAND_QUEUE_H

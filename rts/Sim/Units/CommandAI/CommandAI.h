@@ -53,6 +53,8 @@ public:
 	virtual void GiveCommandReal(const Command& c, bool fromSynced = true);
 	virtual void FinishCommand();
 
+	virtual void FlushQueueEvents();
+
 	virtual void BuggerOff(const float3& pos, float radius) {}
 	virtual void StopMove() {}
 

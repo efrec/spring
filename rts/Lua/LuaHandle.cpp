@@ -1384,6 +1384,185 @@ void CLuaHandle::UnitCmdDone(const CUnit* unit, const Command& command)
 }
 
 
+/***
+ * Every unit but a factory has a single order queue, `CMD.QUEUETYPE_ORDER`.
+ * This is an execution queue of commands that the unit attempts to perform.
+ *
+ * A factory instead has a rally queue and a build queue:
+ * `CMD.QUEUETYPE_BUILD` contains the factory's queue of units to produce.
+ * `CMD.QUEUETYPE_RALLY` contains orders given to factory-produced units.
+ * Fetched with `Spring.GetFactoryCommands` and `Spring.GetUnitCommands`.
+ *
+ * These queues do not neatly map `CMD_WAIT` and `CMD_SELFD` onto factories:
+ * `OPT_SHIFT` pushes both to RALLY; unshifted, WAIT is a BUILD and SELFD only
+ * sets the countdown, reaching no queue at all.
+ *
+ * @alias CommandQueueType
+ * | 0 # Order queue.
+ * | 1 # Rally queue, on factories only.
+ * | 2 # Build queue, on factories only.
+ */
+
+
+/*** Called when a command is added to a unit's command queue.
+ *
+ * Covers every insertion: player and Lua orders, engine-internal orders such
+ * as builders queuing repairs or factories copying rally orders to a finished
+ * unit, and re-insertions from `CMD_INSERT`, repeat mode and wait commands.
+ *
+ * Queue events are recorded as the queue changes and then raised twice a frame:
+ * after unit updates and before weapons aim, and again before `GameFramePost`
+ * for changes made later in the frame. They arrive in order.
+ *
+ * Issuing orders from inside these events is safe to do.
+ *
+ * `cmdIndex` is the 1-based lua position the command has in the queue.
+ *
+ * @function Callins:UnitCommandAdded
+ * @param unitID UnitID
+ * @param unitDefID UnitDefID
+ * @param unitTeam TeamID
+ * @param queueType CommandQueueType
+ * @param cmdIndex integer
+ * @param cmdTag integer
+ * @param cmdID integer
+ */
+void CLuaHandle::UnitCommandAdded(const CUnit* unit, int queueType, int cmdIndex, int cmdTag, int cmdID)
+{
+	RECOIL_DETAILED_TRACY_ZONE;
+	LUA_CALL_IN_CHECK(L);
+	luaL_checkstack(L, 8, __func__);
+
+	const LuaUtils::ScopedDebugTraceBack traceBack(L);
+
+	static const LuaHashString cmdStr(__func__);
+	if (!cmdStr.GetGlobalFunc(L))
+		return;
+
+	lua_pushnumber(L, unit->id);
+	lua_pushnumber(L, unit->unitDef->id);
+	lua_pushnumber(L, unit->team);
+	lua_pushnumber(L, queueType);
+	lua_pushnumber(L, cmdIndex + 1);
+	lua_pushnumber(L, cmdTag);
+	lua_pushnumber(L, cmdID);
+
+	RunCallInTraceback(L, cmdStr, 7, 0, traceBack.GetErrFuncIdx(), false);
+}
+
+
+/*** Called when a command is removed from a unit's command queue.
+ *
+ * Counterpart to `UnitCommandAdded`, with the same coverage and delivery.
+ * This fires for any position in the queue, not only the front position.
+ *
+ * `cmdIndex` is the 1-based lua position the command had when it was removed.
+ *
+ * Leftover commands are not "removed" by a unit's destruction, but recorded
+ * events from earlier in the frame are still raised afterward in the flush.
+ *
+ * @function Callins:UnitCommandRemoved
+ * @param unitID UnitID
+ * @param unitDefID UnitDefID
+ * @param unitTeam TeamID
+ * @param queueType CommandQueueType
+ * @param cmdIndex integer
+ * @param cmdTag integer
+ * @param cmdID integer
+ */
+void CLuaHandle::UnitCommandRemoved(const CUnit* unit, int queueType, int cmdIndex, int cmdTag, int cmdID)
+{
+	RECOIL_DETAILED_TRACY_ZONE;
+	LUA_CALL_IN_CHECK(L);
+	luaL_checkstack(L, 8, __func__);
+
+	const LuaUtils::ScopedDebugTraceBack traceBack(L);
+
+	static const LuaHashString cmdStr(__func__);
+	if (!cmdStr.GetGlobalFunc(L))
+		return;
+
+	lua_pushnumber(L, unit->id);
+	lua_pushnumber(L, unit->unitDef->id);
+	lua_pushnumber(L, unit->team);
+	lua_pushnumber(L, queueType);
+	lua_pushnumber(L, cmdIndex + 1);
+	lua_pushnumber(L, cmdTag);
+	lua_pushnumber(L, cmdID);
+
+	RunCallInTraceback(L, cmdStr, 7, 0, traceBack.GetErrFuncIdx(), false);
+}
+
+
+/*** Called once for each queue that changed, after any individual events.
+ *
+ * Poll `Spring.GetUnitCommands` or `Spring.GetFactoryCommands` from here.
+ * This is generally the cheapest way to watch a command queue fully.
+ *
+ * @function Callins:UnitQueueChanged
+ * @param unitID UnitID
+ * @param unitDefID UnitDefID
+ * @param unitTeam TeamID
+ * @param queueType CommandQueueType
+ */
+void CLuaHandle::UnitQueueChanged(const CUnit* unit, int queueType)
+{
+	RECOIL_DETAILED_TRACY_ZONE;
+	LUA_CALL_IN_CHECK(L);
+	luaL_checkstack(L, 5, __func__);
+
+	const LuaUtils::ScopedDebugTraceBack traceBack(L);
+
+	static const LuaHashString cmdStr(__func__);
+	if (!cmdStr.GetGlobalFunc(L))
+		return;
+
+	lua_pushnumber(L, unit->id);
+	lua_pushnumber(L, unit->unitDef->id);
+	lua_pushnumber(L, unit->team);
+	lua_pushnumber(L, queueType);
+
+	RunCallInTraceback(L, cmdStr, 4, 0, traceBack.GetErrFuncIdx(), false);
+}
+
+
+/*** Called when the first command in a queue changes from the previous flush.
+ *
+ * Some commands can be rewritten in-place without notifying this event.
+ *
+ * After a game load the first flush reports every unit with a non-empty queue.
+ *
+ * @function Callins:UnitCommandActivated
+ * @param unitID UnitID
+ * @param unitDefID UnitDefID
+ * @param unitTeam TeamID
+ * @param queueType CommandQueueType
+ * @param cmdTag integer
+ * @param cmdID integer
+ */
+void CLuaHandle::UnitCommandActivated(const CUnit* unit, int queueType, int cmdTag, int cmdID)
+{
+	RECOIL_DETAILED_TRACY_ZONE;
+	LUA_CALL_IN_CHECK(L);
+	luaL_checkstack(L, 7, __func__);
+
+	const LuaUtils::ScopedDebugTraceBack traceBack(L);
+
+	static const LuaHashString cmdStr(__func__);
+	if (!cmdStr.GetGlobalFunc(L))
+		return;
+
+	lua_pushnumber(L, unit->id);
+	lua_pushnumber(L, unit->unitDef->id);
+	lua_pushnumber(L, unit->team);
+	lua_pushnumber(L, queueType);
+	lua_pushnumber(L, cmdTag);
+	lua_pushnumber(L, cmdID);
+
+	RunCallInTraceback(L, cmdStr, 6, 0, traceBack.GetErrFuncIdx(), false);
+}
+
+
 /*** Called when a unit is damaged (after UnitPreDamaged).
  *
  * @function Callins:UnitDamaged

@@ -1805,6 +1805,7 @@ void CGame::SimFrame() {
 
 		teamHandler.GameFrame(gs->frameNum);
 		playerHandler.GameFrame(gs->frameNum);
+		unitHandler.FlushQueueEvents();
 		eventHandler.GameFramePost(gs->frameNum);
 	}
 

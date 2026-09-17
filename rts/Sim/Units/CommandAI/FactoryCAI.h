@@ -23,6 +23,7 @@ public:
 
 	int GetDefaultCmd(const CUnit* pointed, const CFeature* feature);
 	void SlowUpdate();
+	void FlushQueueEvents() override;
 
 	void GiveCommandReal(const Command& c, bool fromSynced = true);
 

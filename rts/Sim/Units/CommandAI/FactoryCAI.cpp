@@ -57,7 +57,8 @@ CFactoryCAI::CFactoryCAI(): CCommandAI()
 CFactoryCAI::CFactoryCAI(CUnit* owner): CCommandAI(owner)
 {
 	commandQue.SetQueueType(CCommandQueue::BuildQueueType);
-	newUnitCommands.SetQueueType(CCommandQueue::NewUnitQueueType);
+	newUnitCommands.SetQueueType(CCommandQueue::RallyQueueType);
+	newUnitCommands.SetOwner(owner);
 
 	if (owner->unitDef->canmove) {
 		SCommandDescription c;
@@ -252,14 +253,14 @@ void CFactoryCAI::GiveCommandReal(const Command& c, bool fromSynced)
 		if (c.GetOpts() & ALT_KEY) {
 			for (unsigned int cmdNum = 0; cmdNum < commandQue.size() && numToErase; ++cmdNum) {
 				if (commandQue[cmdNum].GetID() == cmdID) {
-					commandQue[cmdNum] = Command(CMD_STOP);
+					commandQue.Replace(cmdNum, Command(CMD_STOP));
 					numToErase--;
 				}
 			}
 		} else {
 			for (int cmdNum = commandQue.size() - 1; cmdNum != -1 && numToErase; --cmdNum) {
 				if (commandQue[cmdNum].GetID() == cmdID) {
-					commandQue[cmdNum] = Command(CMD_STOP);
+					commandQue.Replace(cmdNum, Command(CMD_STOP));
 					numToErase--;
 				}
 			}
@@ -327,7 +328,7 @@ bool CFactoryCAI::RemoveBuildCommand(CCommandQueue::iterator& it)
 
 	if (cmd.GetID() < 0) {
 		// build command, convert into a stop command
-		cmd = Command(CMD_STOP);
+		commandQue.Replace(it - commandQue.begin(), Command(CMD_STOP));
 	}
 
 	return false;
@@ -435,6 +436,13 @@ void CFactoryCAI::ExecuteStop(Command& c)
 	fac->StopBuild();
 
 	commandQue.pop_front();
+}
+
+
+void CFactoryCAI::FlushQueueEvents()
+{
+	commandQue.FlushEvents();
+	newUnitCommands.FlushEvents();
 }
 
 

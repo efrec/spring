@@ -29,6 +29,7 @@ public:
 	void UpdatePreFrame();
 	void Update();
 	void UpdatePostAnimation();
+	void FlushQueueEvents();
 	bool AddUnit(CUnit* unit);
 
 	bool CanAddUnit(int id) const {

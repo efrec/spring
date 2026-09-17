@@ -44,6 +44,11 @@ class CEventHandler
 		bool IsController(const std::string& ciName) const;
 		/// Lets the nano particle effect skip building batches nobody listens to.
 		bool HasNanoParticleUpdateClients() const { return !listNanoParticleUpdate.empty(); }
+		/// Let command queues skip recording events nobody listens to.
+		bool HasQueueEventClients() const {
+			return !(listUnitCommandAdded.empty() && listUnitCommandRemoved.empty() && listUnitQueueChanged.empty());
+		}
+		bool HasCommandActivatedClients() const { return !listUnitCommandActivated.empty(); }
 
 
 	public:
@@ -92,6 +97,10 @@ class CEventHandler
 		void UnitIdle(const CUnit* unit);
 		void UnitCommand(const CUnit* unit, const Command& command, int playerNum, bool fromSynced, bool fromLua);
 		void UnitCmdDone(const CUnit* unit, const Command& command                                              );
+		void UnitCommandAdded(const CUnit* unit, int queueType, int cmdIndex, int cmdTag, int cmdID);
+		void UnitCommandRemoved(const CUnit* unit, int queueType, int cmdIndex, int cmdTag, int cmdID);
+		void UnitQueueChanged(const CUnit* unit, int queueType);
+		void UnitCommandActivated(const CUnit* unit, int queueType, int cmdTag, int cmdID);
 		void UnitDamaged(
 			const CUnit* unit,
 			const CUnit* attacker,
@@ -553,6 +562,26 @@ inline void CEventHandler::UnitCommand(const CUnit* unit, const Command& command
 inline void CEventHandler::UnitCmdDone(const CUnit* unit, const Command& command)
 {
 	ITERATE_UNIT_ALLYTEAM_EVENTCLIENTLIST(UnitCmdDone, unit, command)
+}
+
+inline void CEventHandler::UnitCommandAdded(const CUnit* unit, int queueType, int cmdIndex, int cmdTag, int cmdID)
+{
+	ITERATE_UNIT_ALLYTEAM_EVENTCLIENTLIST(UnitCommandAdded, unit, queueType, cmdIndex, cmdTag, cmdID)
+}
+
+inline void CEventHandler::UnitCommandRemoved(const CUnit* unit, int queueType, int cmdIndex, int cmdTag, int cmdID)
+{
+	ITERATE_UNIT_ALLYTEAM_EVENTCLIENTLIST(UnitCommandRemoved, unit, queueType, cmdIndex, cmdTag, cmdID)
+}
+
+inline void CEventHandler::UnitQueueChanged(const CUnit* unit, int queueType)
+{
+	ITERATE_UNIT_ALLYTEAM_EVENTCLIENTLIST(UnitQueueChanged, unit, queueType)
+}
+
+inline void CEventHandler::UnitCommandActivated(const CUnit* unit, int queueType, int cmdTag, int cmdID)
+{
+	ITERATE_UNIT_ALLYTEAM_EVENTCLIENTLIST(UnitCommandActivated, unit, queueType, cmdTag, cmdID)
 }
 
 

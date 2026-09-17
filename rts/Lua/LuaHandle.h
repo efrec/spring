@@ -138,6 +138,10 @@ class CLuaHandle : public CEventClient
 		void UnitIdle(const CUnit* unit) override;
 		void UnitCommand(const CUnit* unit, const Command& command, int playerNum, bool fromSynced, bool fromLua) override;
 		void UnitCmdDone(const CUnit* unit, const Command& command                                              ) override;
+		void UnitCommandAdded(const CUnit* unit, int queueType, int cmdIndex, int cmdTag, int cmdID) override;
+		void UnitCommandRemoved(const CUnit* unit, int queueType, int cmdIndex, int cmdTag, int cmdID) override;
+		void UnitQueueChanged(const CUnit* unit, int queueType) override;
+		void UnitCommandActivated(const CUnit* unit, int queueType, int cmdTag, int cmdID) override;
 		void UnitDamaged(
 			const CUnit* unit,
 			const CUnit* attacker,
