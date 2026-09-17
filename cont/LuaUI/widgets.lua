@@ -131,6 +131,10 @@ local flexCallIns = {
   'UnitIdle',
   'UnitCommand',
   'UnitCmdDone',
+  'UnitCommandAdded',
+  'UnitCommandRemoved',
+  'UnitQueueChanged',
+  'UnitCommandActivated',
   'UnitDamaged',
   'UnitStunned',
   'UnitEnteredRadar',
@@ -1936,10 +1940,41 @@ function widgetHandler:UnitCommand(
   return
 end
 
-
 function widgetHandler:UnitCmdDone(unitID, unitDefID, unitTeam, cmdID, cmdParams, cmdOpts, cmdTag)
   for _,w in ipairs(self.UnitCmdDoneList) do
     w:UnitCmdDone(unitID, unitDefID, unitTeam, cmdID, cmdParams, cmdOpts, cmdTag)
+  end
+  return
+end
+
+
+function widgetHandler:UnitCommandAdded(unitID, unitDefID, unitTeam, queueType, cmdIndex, cmdTag, cmdID)
+  for _,w in ipairs(self.UnitCommandAddedList) do
+    w:UnitCommandAdded(unitID, unitDefID, unitTeam, queueType, cmdIndex, cmdTag, cmdID)
+  end
+  return
+end
+
+
+function widgetHandler:UnitCommandRemoved(unitID, unitDefID, unitTeam, queueType, cmdIndex, cmdTag, cmdID)
+  for _,w in ipairs(self.UnitCommandRemovedList) do
+    w:UnitCommandRemoved(unitID, unitDefID, unitTeam, queueType, cmdIndex, cmdTag, cmdID)
+  end
+  return
+end
+
+
+function widgetHandler:UnitQueueChanged(unitID, unitDefID, unitTeam, queueType)
+  for _,w in ipairs(self.UnitQueueChangedList) do
+    w:UnitQueueChanged(unitID, unitDefID, unitTeam, queueType)
+  end
+  return
+end
+
+
+function widgetHandler:UnitCommandActivated(unitID, unitDefID, unitTeam, queueType, cmdTag, cmdID)
+  for _,w in ipairs(self.UnitCommandActivatedList) do
+    w:UnitCommandActivated(unitID, unitDefID, unitTeam, queueType, cmdTag, cmdID)
   end
   return
 end
