@@ -67,3 +67,17 @@ endif()
 ADD_LIBRARY(lua STATIC EXCLUDE_FROM_ALL "include/LuaUser.cpp")
 TARGET_LINK_LIBRARIES(lua PUBLIC lua-core)
 SET_TARGET_PROPERTIES(lua PROPERTIES COMPILE_FLAGS "${luaCompileFlags}")
+
+if (BUILD_RECOIL_LUA)
+	ADD_EXECUTABLE(recoil-lua
+			"src/lua.cpp"
+			"include/LuaUserStandalone.cpp"
+			"${CMAKE_SOURCE_DIR}/rts/System/Misc/SpringTime.cpp"
+		)
+	TARGET_LINK_LIBRARIES(recoil-lua PRIVATE lua-core)
+	target_compile_definitions(recoil-lua PRIVATE NOT_USING_CREG)
+
+	if (UNIX)
+		target_compile_definitions(recoil-lua PRIVATE LUA_USE_ISATTY)
+	endif (UNIX)
+endif (BUILD_RECOIL_LUA)

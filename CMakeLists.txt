@@ -434,6 +434,8 @@ if(REPORT_LUANAN)
         add_definitions(-DREPORT_LUANAN)
 endif()
 
+option(BUILD_RECOIL_LUA "Build recoil-lua, a standalone interpreter for the engine's Lua" FALSE)
+
 
 
 ### streflop

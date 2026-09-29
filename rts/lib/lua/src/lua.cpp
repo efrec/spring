@@ -19,6 +19,10 @@
 
 
 
+/* Recoil: FPU state, os.clock and file access; see LuaUserStandalone.cpp */
+extern void LuaStandaloneInit(lua_State *L);
+
+
 static lua_State *globalL = NULL;
 
 static const char *progname = LUA_PROGNAME;
@@ -382,6 +386,7 @@ int main (int argc, char **argv) {
     l_message(argv[0], "cannot create state: not enough memory");
     return EXIT_FAILURE;
   }
+  LuaStandaloneInit(L);  /* Recoil */
   s.argc = argc;
   s.argv = argv;
   status = lua_cpcall(L, &pmain, &s);
