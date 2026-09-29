@@ -37,28 +37,33 @@ SET(luaSources
 		"src/lzio.cpp"
 		"src/print.cpp"
 		"src/lua_privileges.cpp"
-		"include/LuaUser.cpp"
+		"include/LuaUserCommon.cpp"
 	)
 
-ADD_LIBRARY(lua STATIC EXCLUDE_FROM_ALL ${luaSources})
+if (UNIX)
+	SET(luaCompileFlags "-DLUA_USE_MKSTEMP ${PIC_FLAG}")
+else (UNIX)
+	SET(luaCompileFlags "${PIC_FLAG}")
+endif (UNIX)
+
+# Everything but the engine-side hooks in LuaUser.cpp, which need the rest of
+# the engine to link.
+ADD_LIBRARY(lua-core OBJECT EXCLUDE_FROM_ALL ${luaSources})
 
 if (ENABLE_STREFLOP)
-TARGET_LINK_LIBRARIES(lua streflop)
-else ()
-TARGET_LINK_LIBRARIES(lua)
+TARGET_LINK_LIBRARIES(lua-core PUBLIC streflop)
 endif ()
 
-target_include_directories(lua PUBLIC include)
-
-if (UNIX)
-	SET_TARGET_PROPERTIES(lua PROPERTIES COMPILE_FLAGS "-DLUA_USE_MKSTEMP ${PIC_FLAG}")
-else (UNIX)
-	SET_TARGET_PROPERTIES(lua PROPERTIES COMPILE_FLAGS "${PIC_FLAG}")
-endif (UNIX)
+target_include_directories(lua-core PUBLIC include)
+SET_TARGET_PROPERTIES(lua-core PROPERTIES COMPILE_FLAGS "${luaCompileFlags}")
 
 # Vendored lua has an intentional empty-body loop (lauxlib.cpp shebang skip).
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-	target_compile_options(lua PRIVATE
+	target_compile_options(lua-core PRIVATE
 		-Wno-empty-body
 	)
 endif()
+
+ADD_LIBRARY(lua STATIC EXCLUDE_FROM_ALL "include/LuaUser.cpp")
+TARGET_LINK_LIBRARIES(lua PUBLIC lua-core)
+SET_TARGET_PROPERTIES(lua PROPERTIES COMPILE_FLAGS "${luaCompileFlags}")
