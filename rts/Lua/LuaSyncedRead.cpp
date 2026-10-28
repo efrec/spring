@@ -82,6 +82,7 @@
 
 #include <cctype>
 #include <functional>
+#include <span>
 #include <type_traits>
 
 
@@ -6109,10 +6110,212 @@ int LuaSyncedRead::GetUnitBlocking(lua_State* L)
 }
 
 
+static const char* GetProgressStateName(AMoveType::ProgressState state)
+{
+	switch (state) {
+		case AMoveType::Done  : return "done";
+		case AMoveType::Active: return "active";
+		case AMoveType::Failed: return "failed";
+	}
+
+	return nullptr;
+}
+
+static const char* GetAircraftStateName(AAirMoveType::AircraftState state)
+{
+	switch (state) {
+		case AAirMoveType::AIRCRAFT_LANDED  : return "landed";
+		case AAirMoveType::AIRCRAFT_FLYING  : return "flying";
+		case AAirMoveType::AIRCRAFT_LANDING : return "landing";
+		case AAirMoveType::AIRCRAFT_CRASHING: return "crashing";
+		case AAirMoveType::AIRCRAFT_TAKEOFF : return "takeoff";
+		case AAirMoveType::AIRCRAFT_HOVERING: return "hovering";
+	}
+
+	return nullptr;
+}
+
+static const char* GetFlyStateName(CHoverAirMoveType::FlyState state)
+{
+	switch (state) {
+		case CHoverAirMoveType::FLY_CRUISING : return "cruising";
+		case CHoverAirMoveType::FLY_CIRCLING : return "circling";
+		case CHoverAirMoveType::FLY_ATTACKING: return "attacking";
+		case CHoverAirMoveType::FLY_LANDING  : return "landing";
+	}
+
+	return nullptr;
+}
+
+namespace {
+	struct MoveTypeKey {
+		constexpr MoveTypeKey(const char* name): name(name), hash(hashString(name)) {}
+
+		const char* name;
+		uint32_t hash;
+	};
+}
+
+static constexpr MoveTypeKey BASE_MOVETYPE_KEYS[] = {
+	"maxSpeed", "maxWantedSpeed", "goalx", "goaly", "goalz", "progressState",
+};
+
+static constexpr MoveTypeKey GROUND_MOVETYPE_KEYS[] = {
+	"turnRate", "accRate", "decRate", "maxReverseSpeed", "wantedSpeed", "currentSpeed", "goalRadius",
+	"currwaypointx", "currwaypointy", "currwaypointz", "nextwaypointx", "nextwaypointy", "nextwaypointz",
+	"requestedSpeed", "pathFailures",
+};
+
+static constexpr MoveTypeKey GUNSHIP_MOVETYPE_KEYS[] = {
+	"wantedHeight", "collide", "useSmoothMesh", "aircraftState", "flyState", "goalDistance",
+	"bankingAllowed", "currentBank", "currentPitch", "turnRate", "accRate", "decRate", "altitudeRate",
+	"brakeDistance", "dontLand", "maxDrift",
+};
+
+static constexpr MoveTypeKey AIRPLANE_MOVETYPE_KEYS[] = {
+	"aircraftState", "wantedHeight", "collide", "useSmoothMesh", "myGravity",
+	"maxBank", "maxPitch", "turnRadius", "maxAcc", "maxAileron", "maxElevator", "maxRudder",
+};
+
+static bool PushMoveTypeValue(lua_State* L, const AMoveType* mt, uint32_t keyHash)
+{
+	switch (keyHash) {
+		case hashString("maxSpeed"      ): { lua_pushnumber(L, mt->GetMaxSpeed() * GAME_SPEED); } return true;
+		case hashString("maxWantedSpeed"): { lua_pushnumber(L, mt->GetMaxWantedSpeed() * GAME_SPEED); } return true;
+		case hashString("goalx"         ): { lua_pushnumber(L, mt->goalPos.x); } return true;
+		case hashString("goaly"         ): { lua_pushnumber(L, mt->goalPos.y); } return true;
+		case hashString("goalz"         ): { lua_pushnumber(L, mt->goalPos.z); } return true;
+		case hashString("progressState" ): { lua_pushstring(L, GetProgressStateName(mt->progressState)); } return true;
+		default: {} break;
+	}
+
+	return false;
+}
+
+static bool PushMoveTypeValue(lua_State* L, const CGroundMoveType* mt, uint32_t keyHash)
+{
+	switch (keyHash) {
+		case hashString("turnRate"       ): { lua_pushnumber(L, mt->GetTurnRate()); } return true;
+		case hashString("accRate"        ): { lua_pushnumber(L, mt->GetAccRate()); } return true;
+		case hashString("decRate"        ): { lua_pushnumber(L, mt->GetDecRate()); } return true;
+		case hashString("maxReverseSpeed"): { lua_pushnumber(L, mt->GetMaxReverseSpeed() * GAME_SPEED); } return true;
+		case hashString("wantedSpeed"    ): { lua_pushnumber(L, mt->GetWantedSpeed() * GAME_SPEED); } return true;
+		case hashString("currentSpeed"   ): { lua_pushnumber(L, mt->GetCurrentSpeed() * GAME_SPEED); } return true;
+		case hashString("goalRadius"     ): { lua_pushnumber(L, mt->GetGoalRadius()); } return true;
+		case hashString("currwaypointx"  ): { lua_pushnumber(L, (mt->GetCurrWayPoint()).x); } return true;
+		case hashString("currwaypointy"  ): { lua_pushnumber(L, (mt->GetCurrWayPoint()).y); } return true;
+		case hashString("currwaypointz"  ): { lua_pushnumber(L, (mt->GetCurrWayPoint()).z); } return true;
+		case hashString("nextwaypointx"  ): { lua_pushnumber(L, (mt->GetNextWayPoint()).x); } return true;
+		case hashString("nextwaypointy"  ): { lua_pushnumber(L, (mt->GetNextWayPoint()).y); } return true;
+		case hashString("nextwaypointz"  ): { lua_pushnumber(L, (mt->GetNextWayPoint()).z); } return true;
+		case hashString("requestedSpeed" ): { lua_pushnumber(L, 0.0f); } return true;
+		case hashString("pathFailures"   ): { lua_pushnumber(L, 0); } return true;
+		default: {} break;
+	}
+
+	return false;
+}
+
+static bool PushMoveTypeValue(lua_State* L, const CHoverAirMoveType* mt, uint32_t keyHash)
+{
+	switch (keyHash) {
+		case hashString("wantedHeight"  ): { lua_pushnumber(L, mt->wantedHeight); } return true;
+		case hashString("collide"       ): { lua_pushboolean(L, mt->collide); } return true;
+		case hashString("useSmoothMesh" ): { lua_pushboolean(L, mt->useSmoothMesh); } return true;
+		case hashString("aircraftState" ): { lua_pushstring(L, GetAircraftStateName(mt->aircraftState)); } return true;
+		case hashString("flyState"      ): { lua_pushstring(L, GetFlyStateName(mt->flyState)); } return true;
+		case hashString("goalDistance"  ): { lua_pushnumber(L, mt->goalDistance); } return true;
+		case hashString("bankingAllowed"): { lua_pushboolean(L, mt->bankingAllowed); } return true;
+		case hashString("currentBank"   ): { lua_pushnumber(L, mt->currentBank); } return true;
+		case hashString("currentPitch"  ): { lua_pushnumber(L, mt->currentPitch); } return true;
+		case hashString("turnRate"      ): { lua_pushnumber(L, mt->turnRate); } return true;
+		case hashString("accRate"       ): { lua_pushnumber(L, mt->accRate); } return true;
+		case hashString("decRate"       ): { lua_pushnumber(L, mt->decRate); } return true;
+		case hashString("altitudeRate"  ): { lua_pushnumber(L, mt->altitudeRate); } return true;
+		case hashString("brakeDistance" ): { lua_pushnumber(L, -1.0f); } return true; // DEPRECATED
+		case hashString("dontLand"      ): { lua_pushboolean(L, mt->GetAllowLanding()); } return true;
+		case hashString("maxDrift"      ): { lua_pushnumber(L, mt->maxDrift); } return true;
+		default: {} break;
+	}
+
+	return false;
+}
+
+static bool PushMoveTypeValue(lua_State* L, const CStrafeAirMoveType* mt, uint32_t keyHash)
+{
+	switch (keyHash) {
+		case hashString("aircraftState"): { lua_pushstring(L, GetAircraftStateName(mt->aircraftState)); } return true;
+		case hashString("wantedHeight" ): { lua_pushnumber(L, mt->wantedHeight); } return true;
+		case hashString("collide"      ): { lua_pushboolean(L, mt->collide); } return true;
+		case hashString("useSmoothMesh"): { lua_pushboolean(L, mt->useSmoothMesh); } return true;
+		case hashString("myGravity"    ): { lua_pushnumber(L, mt->myGravity); } return true;
+		case hashString("maxBank"      ): { lua_pushnumber(L, mt->maxBank); } return true;
+		case hashString("maxPitch"     ): { lua_pushnumber(L, mt->maxBank); } return true;
+		case hashString("turnRadius"   ): { lua_pushnumber(L, mt->turnRadius); } return true;
+		case hashString("maxAcc"       ): { lua_pushnumber(L, mt->accRate); } return true;
+		case hashString("maxAileron"   ): { lua_pushnumber(L, mt->maxAileron); } return true;
+		case hashString("maxElevator"  ): { lua_pushnumber(L, mt->maxElevator); } return true;
+		case hashString("maxRudder"    ): { lua_pushnumber(L, mt->maxRudder); } return true;
+		default: {} break;
+	}
+
+	return false;
+}
+
+template<typename MoveType>
+static int PushMoveTypeData(lua_State* L, const MoveType* mt, const char* key, const char* name, std::span<const MoveTypeKey> keys = {})
+{
+	const AMoveType* amt = mt;
+
+	if (key != nullptr) {
+		const uint32_t keyHash = hashString(key);
+
+		if (keyHash == hashString("name")) {
+			lua_pushstring(L, name);
+			return 1;
+		}
+
+		if (PushMoveTypeValue(L, amt, keyHash))
+			return 1;
+
+		if constexpr (!std::is_same_v<MoveType, AMoveType>) {
+			if (PushMoveTypeValue(L, mt, keyHash))
+				return 1;
+		}
+
+		return 0;
+	}
+
+	lua_createtable(L, 0, static_cast<int>(1 + std::size(BASE_MOVETYPE_KEYS) + keys.size()));
+	LuaPushNamedString(L, "name", name);
+
+	for (const MoveTypeKey& k: BASE_MOVETYPE_KEYS) {
+		if (PushMoveTypeValue(L, amt, k.hash))
+			lua_setfield(L, -2, k.name);
+	}
+
+	if constexpr (!std::is_same_v<MoveType, AMoveType>) {
+		for (const MoveTypeKey& k: keys) {
+			if (PushMoveTypeValue(L, mt, k.hash))
+				lua_setfield(L, -2, k.name);
+		}
+	}
+
+	return 1;
+}
+
 /***
  *
  * @function Spring.GetUnitMoveTypeData
  * @param unitID UnitID
+ * @return table? moveTypeData
+ */
+/***
+ *
+ * @function Spring.GetUnitMoveTypeData
+ * @param unitID UnitID
+ * @param key string Any field name of the table form.
+ * @return number|boolean|string|nil value `nil` when the unit's movetype has no such field.
  */
 int LuaSyncedRead::GetUnitMoveTypeData(lua_State* L)
 {
@@ -6120,178 +6323,25 @@ int LuaSyncedRead::GetUnitMoveTypeData(lua_State* L)
 	if (unit == nullptr)
 		return 0;
 
-	AMoveType* amt = unit->moveType;
+	const AMoveType* amt = unit->moveType;
+	const char* key = luaL_optstring(L, 2, nullptr);
 
-	lua_createtable(L, 0, 26);
-	LuaPushNamedNumber(L, "maxSpeed", amt->GetMaxSpeed() * GAME_SPEED);
-	LuaPushNamedNumber(L, "maxWantedSpeed", amt->GetMaxWantedSpeed() * GAME_SPEED);
-	LuaPushNamedNumber(L, "goalx", amt->goalPos.x);
-	LuaPushNamedNumber(L, "goaly", amt->goalPos.y);
-	LuaPushNamedNumber(L, "goalz", amt->goalPos.z);
+	if (const CGroundMoveType* mt = dynamic_cast<const CGroundMoveType*>(amt); mt != nullptr)
+		return PushMoveTypeData(L, mt, key, "ground", GROUND_MOVETYPE_KEYS);
 
-	switch (amt->progressState) {
-		case AMoveType::Done:
-			LuaPushNamedString(L, "progressState", "done");
-			break;
-		case AMoveType::Active:
-			LuaPushNamedString(L, "progressState", "active");
-			break;
-		case AMoveType::Failed:
-			LuaPushNamedString(L, "progressState", "failed");
-			break;
-	}
+	if (const CHoverAirMoveType* mt = dynamic_cast<const CHoverAirMoveType*>(amt); mt != nullptr)
+		return PushMoveTypeData(L, mt, key, "gunship", GUNSHIP_MOVETYPE_KEYS);
 
-	const CGroundMoveType* groundmt = dynamic_cast<CGroundMoveType*>(unit->moveType);
+	if (const CStrafeAirMoveType* mt = dynamic_cast<const CStrafeAirMoveType*>(amt); mt != nullptr)
+		return PushMoveTypeData(L, mt, key, "airplane", AIRPLANE_MOVETYPE_KEYS);
 
-	if (groundmt != nullptr) {
-		LuaPushNamedString(L, "name", "ground");
+	if (dynamic_cast<const CStaticMoveType*>(amt) != nullptr)
+		return PushMoveTypeData(L, amt, key, "static");
 
-		LuaPushNamedNumber(L, "turnRate", groundmt->GetTurnRate());
-		LuaPushNamedNumber(L, "accRate", groundmt->GetAccRate());
-		LuaPushNamedNumber(L, "decRate", groundmt->GetDecRate());
+	if (dynamic_cast<const CScriptMoveType*>(amt) != nullptr)
+		return PushMoveTypeData(L, amt, key, "script");
 
-		LuaPushNamedNumber(L, "maxReverseSpeed", groundmt->GetMaxReverseSpeed() * GAME_SPEED);
-		LuaPushNamedNumber(L, "wantedSpeed", groundmt->GetWantedSpeed() * GAME_SPEED);
-		LuaPushNamedNumber(L, "currentSpeed", groundmt->GetCurrentSpeed() * GAME_SPEED);
-
-		LuaPushNamedNumber(L, "goalRadius", groundmt->GetGoalRadius());
-
-		LuaPushNamedNumber(L, "currwaypointx", (groundmt->GetCurrWayPoint()).x);
-		LuaPushNamedNumber(L, "currwaypointy", (groundmt->GetCurrWayPoint()).y);
-		LuaPushNamedNumber(L, "currwaypointz", (groundmt->GetCurrWayPoint()).z);
-		LuaPushNamedNumber(L, "nextwaypointx", (groundmt->GetNextWayPoint()).x);
-		LuaPushNamedNumber(L, "nextwaypointy", (groundmt->GetNextWayPoint()).y);
-		LuaPushNamedNumber(L, "nextwaypointz", (groundmt->GetNextWayPoint()).z);
-
-		LuaPushNamedNumber(L, "requestedSpeed", 0.0f);
-
-		LuaPushNamedNumber(L, "pathFailures", 0);
-
-		return 1;
-	}
-
-	const CHoverAirMoveType* hAMT = dynamic_cast<CHoverAirMoveType*>(unit->moveType);
-
-	if (hAMT != nullptr) {
-		LuaPushNamedString(L, "name", "gunship");
-
-		LuaPushNamedNumber(L, "wantedHeight", hAMT->wantedHeight);
-		LuaPushNamedBool(L, "collide", hAMT->collide);
-		LuaPushNamedBool(L, "useSmoothMesh", hAMT->useSmoothMesh);
-
-		switch (hAMT->aircraftState) {
-			case AAirMoveType::AIRCRAFT_LANDED:
-				LuaPushNamedString(L, "aircraftState", "landed");
-				break;
-			case AAirMoveType::AIRCRAFT_FLYING:
-				LuaPushNamedString(L, "aircraftState", "flying");
-				break;
-			case AAirMoveType::AIRCRAFT_LANDING:
-				LuaPushNamedString(L, "aircraftState", "landing");
-				break;
-			case AAirMoveType::AIRCRAFT_CRASHING:
-				LuaPushNamedString(L, "aircraftState", "crashing");
-				break;
-			case AAirMoveType::AIRCRAFT_TAKEOFF:
-				LuaPushNamedString(L, "aircraftState", "takeoff");
-				break;
-			case AAirMoveType::AIRCRAFT_HOVERING:
-				LuaPushNamedString(L, "aircraftState", "hovering");
-				break;
-		};
-
-		switch (hAMT->flyState) {
-			case CHoverAirMoveType::FLY_CRUISING:
-				LuaPushNamedString(L, "flyState", "cruising");
-				break;
-			case CHoverAirMoveType::FLY_CIRCLING:
-				LuaPushNamedString(L, "flyState", "circling");
-				break;
-			case CHoverAirMoveType::FLY_ATTACKING:
-				LuaPushNamedString(L, "flyState", "attacking");
-				break;
-			case CHoverAirMoveType::FLY_LANDING:
-				LuaPushNamedString(L, "flyState", "landing");
-				break;
-		}
-
-		LuaPushNamedNumber(L, "goalDistance", hAMT->goalDistance);
-
-		LuaPushNamedBool  (L, "bankingAllowed", hAMT->bankingAllowed);
-		LuaPushNamedNumber(L, "currentBank", hAMT->currentBank);
-		LuaPushNamedNumber(L, "currentPitch", hAMT->currentPitch);
-
-		LuaPushNamedNumber(L, "turnRate",     hAMT->turnRate);
-		LuaPushNamedNumber(L, "accRate",      hAMT->accRate);
-		LuaPushNamedNumber(L, "decRate",      hAMT->decRate);
-		LuaPushNamedNumber(L, "altitudeRate", hAMT->altitudeRate);
-
-		LuaPushNamedNumber(L, "brakeDistance", -1.0f); // DEPRECATED
-		LuaPushNamedBool  (L, "dontLand", hAMT->GetAllowLanding());
-		LuaPushNamedNumber(L, "maxDrift", hAMT->maxDrift);
-
-		return 1;
-	}
-
-	const CStrafeAirMoveType* sAMT = dynamic_cast<CStrafeAirMoveType*>(unit->moveType);
-
-	if (sAMT != nullptr) {
-		LuaPushNamedString(L, "name", "airplane");
-
-		switch (sAMT->aircraftState) {
-			case AAirMoveType::AIRCRAFT_LANDED:
-				LuaPushNamedString(L, "aircraftState", "landed");
-				break;
-			case AAirMoveType::AIRCRAFT_FLYING:
-				LuaPushNamedString(L, "aircraftState", "flying");
-				break;
-			case AAirMoveType::AIRCRAFT_LANDING:
-				LuaPushNamedString(L, "aircraftState", "landing");
-				break;
-			case AAirMoveType::AIRCRAFT_CRASHING:
-				LuaPushNamedString(L, "aircraftState", "crashing");
-				break;
-			case AAirMoveType::AIRCRAFT_TAKEOFF:
-				LuaPushNamedString(L, "aircraftState", "takeoff");
-				break;
-			case AAirMoveType::AIRCRAFT_HOVERING:
-				LuaPushNamedString(L, "aircraftState", "hovering");
-				break;
-		};
-		LuaPushNamedNumber(L, "wantedHeight",  sAMT->wantedHeight);
-		LuaPushNamedBool  (L, "collide",       sAMT->collide);
-		LuaPushNamedBool  (L, "useSmoothMesh", sAMT->useSmoothMesh);
-
-		LuaPushNamedNumber(L, "myGravity", sAMT->myGravity);
-
-		LuaPushNamedNumber(L, "maxBank",    sAMT->maxBank);
-		LuaPushNamedNumber(L, "maxPitch",   sAMT->maxBank);
-		LuaPushNamedNumber(L, "turnRadius", sAMT->turnRadius);
-
-		LuaPushNamedNumber(L, "maxAcc",      sAMT->accRate);
-		LuaPushNamedNumber(L, "maxAileron",  sAMT->maxAileron);
-		LuaPushNamedNumber(L, "maxElevator", sAMT->maxElevator);
-		LuaPushNamedNumber(L, "maxRudder",   sAMT->maxRudder);
-
-		return 1;
-	}
-
-	const CStaticMoveType* staticmt = dynamic_cast<CStaticMoveType*>(unit->moveType);
-
-	if (staticmt != nullptr) {
-		LuaPushNamedString(L, "name", "static");
-		return 1;
-	}
-
-	const CScriptMoveType* scriptmt = dynamic_cast<CScriptMoveType*>(unit->moveType);
-
-	if (scriptmt != nullptr) {
-		LuaPushNamedString(L, "name", "script");
-		return 1;
-	}
-
-	LuaPushNamedString(L, "name", "unknown");
-	return 1;
+	return PushMoveTypeData(L, amt, key, "unknown");
 }
 
 
