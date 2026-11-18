@@ -12,6 +12,10 @@
 #include <stdarg.h>
 #include <stddef.h>
 
+#if !defined(__cplusplus)
+#include <stdbool.h>
+#endif
+
 
 #include "luaconf.h"
 
@@ -90,7 +94,7 @@ typedef void * (*lua_Alloc) (void *ud, void *ptr, size_t osize, size_t nsize);
 /*
 ** generic extra include file
 */
-#if defined(LUA_USER_H)
+#if defined(LUA_USER_H) && defined(__cplusplus)
 #include LUA_USER_H
 #endif
 

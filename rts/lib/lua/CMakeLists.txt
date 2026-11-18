@@ -69,15 +69,49 @@ TARGET_LINK_LIBRARIES(lua PUBLIC lua-core)
 SET_TARGET_PROPERTIES(lua PROPERTIES COMPILE_FLAGS "${luaCompileFlags}")
 
 if (BUILD_RECOIL_LUA)
-	ADD_EXECUTABLE(recoil-lua
-			"src/lua.cpp"
+	# lua-core again, with the C API that C modules load against, and the
+	# standalone hooks in place of LuaUser.cpp's
+	SET(recoilLuaSources
+			${luaSources}
 			"include/LuaUserStandalone.cpp"
 			"${CMAKE_SOURCE_DIR}/rts/System/Misc/SpringTime.cpp"
 		)
-	TARGET_LINK_LIBRARIES(recoil-lua PRIVATE lua-core)
-	target_compile_definitions(recoil-lua PRIVATE NOT_USING_CREG)
+
+	if (WIN32)
+		# C modules on Windows link against lua51.dll, as with stock Lua
+		ADD_LIBRARY(recoil-lua-core SHARED EXCLUDE_FROM_ALL ${recoilLuaSources})
+		SET_TARGET_PROPERTIES(recoil-lua-core PROPERTIES OUTPUT_NAME lua51 PREFIX "" WINDOWS_EXPORT_ALL_SYMBOLS ON)
+	else (WIN32)
+		ADD_LIBRARY(recoil-lua-core OBJECT EXCLUDE_FROM_ALL ${recoilLuaSources})
+	endif (WIN32)
+
+	if (ENABLE_STREFLOP)
+	TARGET_LINK_LIBRARIES(recoil-lua-core PUBLIC streflop)
+	endif ()
+
+	target_include_directories(recoil-lua-core PUBLIC include)
+	SET_TARGET_PROPERTIES(recoil-lua-core PROPERTIES COMPILE_FLAGS "${luaCompileFlags}" CXX_VISIBILITY_PRESET default)
+	target_compile_definitions(recoil-lua-core PUBLIC LUA_USE_C_LINKAGE)
+	target_compile_definitions(recoil-lua-core PRIVATE NOT_USING_CREG)
+
+	if (UNIX)
+		target_compile_definitions(recoil-lua-core PRIVATE LUA_USE_DLOPEN LUA_USE_POPEN)
+		TARGET_LINK_LIBRARIES(recoil-lua-core PUBLIC ${CMAKE_DL_LIBS})
+	elseif (WIN32)
+		target_compile_definitions(recoil-lua-core PUBLIC LUA_WIN)
+	endif ()
+
+	if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+		target_compile_options(recoil-lua-core PRIVATE
+			-Wno-empty-body
+		)
+	endif()
+
+	ADD_EXECUTABLE(recoil-lua "src/lua.cpp")
+	TARGET_LINK_LIBRARIES(recoil-lua PRIVATE recoil-lua-core)
 
 	if (UNIX)
 		target_compile_definitions(recoil-lua PRIVATE LUA_USE_ISATTY)
+		SET_TARGET_PROPERTIES(recoil-lua PROPERTIES ENABLE_EXPORTS ON)
 	endif (UNIX)
 endif (BUILD_RECOIL_LUA)

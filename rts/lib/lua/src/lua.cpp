@@ -51,6 +51,7 @@ static void print_usage (void) {
   "  -l name  require library " LUA_QL("name") "\n"
   "  -i       enter interactive mode after executing " LUA_QL("script") "\n"
   "  -v       show version information\n"
+  "  -a       print addresses in tostring, as stock Lua does\n"
   "  --       stop handling options\n"
   "  -        execute stdin and stop handling options\n"
   ,
@@ -280,6 +281,9 @@ static int collectargs (char **argv, int *pi, int *pv, int *pe) {
         notail(argv[i]);
         *pv = 1;
         break;
+      case 'a':
+        notail(argv[i]);
+        break;
       case 'e':
         *pe = 1;  /* go through */
       case 'l':
@@ -295,12 +299,40 @@ static int collectargs (char **argv, int *pi, int *pv, int *pe) {
 }
 
 
+/* Recoil prints reference types without addresses, but busted's libraries
+** take object identity from them */
+static int address_tostring (lua_State *L) {
+  luaL_checkany(L, 1);
+  if (luaL_callmeta(L, 1, "__tostring"))
+    return 1;
+  switch (lua_type(L, 1)) {
+    case LUA_TTABLE:
+    case LUA_TFUNCTION:
+    case LUA_TUSERDATA:
+    case LUA_TLIGHTUSERDATA:
+    case LUA_TTHREAD:
+      lua_pushfstring(L, "%s: %p", luaL_typename(L, 1), lua_topointer(L, 1));
+      return 1;
+  }
+  lua_pushvalue(L, lua_upvalueindex(1));
+  lua_pushvalue(L, 1);
+  lua_call(L, 1, 1);
+  return 1;
+}
+
+
 static int runargs (lua_State *L, char **argv, int n) {
   int i;
   for (i = 1; i < n; i++) {
     if (argv[i] == NULL) continue;
     lua_assert(argv[i][0] == '-');
     switch (argv[i][1]) {  /* option */
+      case 'a': {
+        lua_getglobal(L, "tostring");
+        lua_pushcclosure(L, address_tostring, 1);
+        lua_setglobal(L, "tostring");
+        break;
+      }
       case 'e': {
         const char *chunk = argv[i] + 2;
         if (*chunk == '\0') chunk = argv[++i];

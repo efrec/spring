@@ -160,6 +160,11 @@
 #define LUA_API __declspec(dllimport)
 #endif
 
+#elif defined(LUA_USE_C_LINKAGE) && defined(__cplusplus)
+
+/* for C modules loaded at runtime, as in recoil-lua */
+#define LUA_API		extern "C"
+
 #else
 
 #define LUA_API		extern
