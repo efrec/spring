@@ -62,3 +62,23 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 		-Wno-empty-body
 	)
 endif()
+
+ADD_EXECUTABLE(recoil-lua EXCLUDE_FROM_ALL
+		${luaSources}
+		"src/lua.cpp"
+		"../../System/Misc/SpringTime.cpp"
+	)
+
+if (ENABLE_STREFLOP)
+TARGET_LINK_LIBRARIES(recoil-lua streflop)
+endif ()
+
+target_compile_definitions(recoil-lua PRIVATE RECOIL_LUA_STANDALONE NOT_USING_CREG)
+
+if (NOT MSVC)
+	target_compile_definitions(recoil-lua PRIVATE LUA_USE_ISATTY)
+endif (NOT MSVC)
+
+if (UNIX)
+	target_compile_definitions(recoil-lua PRIVATE LUA_USE_MKSTEMP)
+endif (UNIX)

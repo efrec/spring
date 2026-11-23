@@ -6,9 +6,11 @@
 #include "lib/streflop/streflop_cond.h"
 
 #include "LuaInclude.h"
+#ifndef RECOIL_LUA_STANDALONE
 #include "Lua/LuaAllocState.h"
 #include "Lua/LuaHandle.h"
 #include "Lua/LuaMemPool.h"
+#endif
 
 #include "System/GlobalRNG.h"
 #include "System/SpringMath.h"
@@ -207,6 +209,7 @@ void LuaMutexYield(lua_State* L)
 
 
 
+#ifndef RECOIL_LUA_STANDALONE
 ///////////////////////////////////////////////////////////////////////////
 //
 
@@ -337,6 +340,7 @@ void spring_lua_alloc_update_stats(int clearStatsFrame)
 	gLuaAllocState.numLuaAllocs.store(gLuaAllocState.numLuaAllocs * (1 - clearStatsFrame));
 	gLuaAllocState.luaAllocTime.store(gLuaAllocState.luaAllocTime * (1 - clearStatsFrame));
 }
+#endif // RECOIL_LUA_STANDALONE
 
 
 

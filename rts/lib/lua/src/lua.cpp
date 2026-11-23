@@ -17,6 +17,10 @@
 #include "lauxlib.h"
 #include "lualib.h"
 
+/* Recoil */
+#include "lib/streflop/streflop_cond.h"
+#include "System/Misc/SpringTime.h"
+
 
 
 static lua_State *globalL = NULL;
@@ -374,6 +378,21 @@ static int pmain (lua_State *L) {
 }
 
 
+/* Recoil */
+static void init_recoil_lua (lua_State *L) {
+#if STREFLOP_ENABLED
+  streflop::streflop_init<streflop::Simple>();
+#endif
+  /* os.clock */
+  spring_clock::PushTickRate(false);
+  spring_time::setstarttime(spring_time::gettime(true));
+  lua_set_fopen(L, [](lua_State *, const char *path, const char *mode) { return fopen(path, mode); });
+  lua_set_system(L, [](lua_State *, const char *command) { return system(command); });
+  lua_set_remove(L, [](lua_State *, const char *path) { return remove(path); });
+  lua_set_rename(L, [](lua_State *, const char *from, const char *to) { return rename(from, to); });
+}
+
+
 int main (int argc, char **argv) {
   int status;
   struct Smain s;
@@ -382,6 +401,7 @@ int main (int argc, char **argv) {
     l_message(argv[0], "cannot create state: not enough memory");
     return EXIT_FAILURE;
   }
+  init_recoil_lua(L);
   s.argc = argc;
   s.argv = argv;
   status = lua_cpcall(L, &pmain, &s);
